@@ -28,13 +28,12 @@ use crate::protocols_handler::{
     ProtocolsHandlerUpgrErr,
     IntoProtocolsHandler
 };
-
 use libp2p_core::{
     ConnectedPoint,
     PeerId,
     Multiaddr,
     connection::ConnectionId,
-    either::EitherOutput,
+    either::{EitherError, EitherOutput},
     upgrade::{DeniedUpgrade, EitherUpgrade}
 };
 use std::{error, task::Context, task::Poll};
@@ -50,6 +49,16 @@ impl<TBehaviour> Toggle<TBehaviour> {
     /// Returns `true` if `Toggle` is enabled and `false` if it's disabled.
     pub fn is_enabled(&self) -> bool {
         self.inner.is_some()
+    }
+
+    /// Returns a reference to the inner `NetworkBehaviour`.
+    pub fn as_ref(&self) -> Option<&TBehaviour> {
+        self.inner.as_ref()
+    }
+
+    /// Returns a mutable reference to the inner `NetworkBehaviour`.
+    pub fn as_mut(&mut self) -> Option<&mut TBehaviour> {
+        self.inner.as_mut()
     }
 }
 
@@ -141,7 +150,7 @@ where
         }
     }
 
-    fn poll(&mut self, cx: &mut Context, params: &mut impl PollParameters)
+    fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters)
         -> Poll<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>
     {
         if let Some(inner) = self.inner.as_mut() {
@@ -240,9 +249,25 @@ where
             .inject_event(event)
     }
 
+    fn inject_address_change(&mut self, addr: &Multiaddr) {
+        if let Some(inner) = self.inner.as_mut() {
+            inner.inject_address_change(addr)
+        }
+    }
+
     fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, err: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>) {
         self.inner.as_mut().expect("Can't receive an outbound substream if disabled; QED")
             .inject_dial_upgrade_error(info, err)
+    }
+
+    fn inject_listen_upgrade_error(&mut self, err: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>) {
+        if let Some(inner) = self.inner.as_mut() {
+            let err = err.map_upgrade_err(|e| e.map_err(|e| match e {
+                EitherError::A(e) => e,
+                EitherError::B(v) => void::unreachable(v)
+            }));
+            inner.inject_listen_upgrade_error(err)
+        }
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -252,7 +277,7 @@ where
 
     fn poll(
         &mut self,
-        cx: &mut Context,
+        cx: &mut Context<'_>,
     ) -> Poll<
         ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent, Self::Error>
     > {

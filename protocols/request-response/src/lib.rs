@@ -303,6 +303,12 @@ where
         }
     }
 
+    // Disabled until #1706 is fixed.
+    //    /// Wrap this behaviour in [`Throttled`] to limit the number of concurrent requests per peer.
+    //    pub fn throttled(self) -> Throttled<TCodec> {
+    //        Throttled::new(self)
+    //    }
+
     /// Initiates sending a request.
     ///
     /// If the targeted peer is currently not connected, a dialing
@@ -625,7 +631,7 @@ where
 
     fn poll(
         &mut self,
-        _: &mut Context,
+        _: &mut Context<'_>,
         _: &mut impl PollParameters,
     ) -> Poll<
         NetworkBehaviourAction<

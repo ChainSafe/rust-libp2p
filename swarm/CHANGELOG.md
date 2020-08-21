@@ -1,3 +1,35 @@
+# 0.21.0 [2020-08-18]
+
+- Add missing delegation calls in some `ProtocolsHandler` wrappers.
+See [PR 1710](https://github.com/libp2p/rust-libp2p/pull/1710).
+
+- Add as_ref and as_mut functions to Toggle
+[PR 1684](https://github.com/libp2p/rust-libp2p/pull/1684).
+
+- The `cause` of `SwarmEvent::ConnectionClosed` is now an `Option`,
+and `None` indicates an active connection close not caused by an
+error.
+
+- `DialError::Banned` has been added and is returned from `Swarm::dial`
+if the peer is banned, thereby also invoking the `NetworkBehaviour::inject_dial_failure`
+callback.
+
+- Update the `libp2p-core` dependency to `0.21`, fixing [1584](https://github.com/libp2p/rust-libp2p/issues/1584).
+
+- Fix connections being kept alive by `OneShotHandler` when not handling any
+  requests [PR 1698](https://github.com/libp2p/rust-libp2p/pull/1698).
+
+# 0.20.1 [2020-07-08]
+
+- Documentation updates.
+
+- Ignore addresses returned by `NetworkBehaviour::addresses_of_peer`
+that the `Swarm` considers to be listening addresses of the local node. This
+avoids futile dialing attempts of a node to itself, which can otherwise
+even happen in genuine situations, e.g. after the local node changed
+its network identity and a behaviour makes a dialing attempt to a
+former identity using the same addresses.
+
 # 0.20.0 [2020-07-01]
 
 - Updated the `libp2p-core` dependency.

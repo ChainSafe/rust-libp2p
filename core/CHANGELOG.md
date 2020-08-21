@@ -1,3 +1,26 @@
+# 0.21.0 [2020-08-18]
+
+- Add `transport::Builder::multiplex_ext` for further customisation during
+`StreamMuxer` creation. [PR 1691](https://github.com/libp2p/rust-libp2p/pull/1691).
+
+- Refactoring of connection close and disconnect behaviour.  In particular, the former
+  `NetworkEvent::ConnectionError` is now `NetworkEvent::ConnectionClosed` with the `error`
+  field being an `Option` and `None` indicating an active (but not necessarily orderly) close.
+  This guarantees that `ConnectionEstablished` events are always eventually paired
+  with `ConnectionClosed` events, regardless of how connections are closed.
+  Correspondingly, `EstablishedConnection::close` is now `EstablishedConnection::start_close`
+  to reflect that an orderly close completes asynchronously in the background, with the
+  outcome observed by continued polling of the `Network`. In contrast, `disconnect`ing
+  a peer takes effect immediately without an orderly connection shutdown.
+  See [PR 1619](https://github.com/libp2p/rust-libp2p/pull/1619) for further details.
+
+- Add `ConnectedPoint::get_remote_address`
+  ([PR 1649](https://github.com/libp2p/rust-libp2p/pull/1649)).
+
+# 0.20.1 [2020-07-17]
+
+- Update ed25519-dalek dependency.
+
 # 0.20.0 [2020-07-01]
 
 - Conditional compilation fixes for the `wasm32-wasi` target

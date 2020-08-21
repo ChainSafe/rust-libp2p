@@ -28,7 +28,7 @@ use parking_lot::Mutex;
 use std::{fmt, io, iter, ops::{Deref, DerefMut}, pin::Pin, task::Context};
 use thiserror::Error;
 
-pub use yamux::WindowUpdateMode;
+pub use yamux::{Mode, WindowUpdateMode};
 
 /// A Yamux connection.
 ///
@@ -37,7 +37,7 @@ pub use yamux::WindowUpdateMode;
 pub struct Yamux<S>(Mutex<Inner<S>>);
 
 impl<S> fmt::Debug for Yamux<S> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("Yamux")
     }
 }
@@ -103,7 +103,7 @@ where
     type OutboundSubstream = OpenSubstreamToken;
     type Error = YamuxError;
 
-    fn poll_event(&self, c: &mut Context) -> Poll<StreamMuxerEvent<Self::Substream>> {
+    fn poll_event(&self, c: &mut Context<'_>) -> Poll<StreamMuxerEvent<Self::Substream>> {
         let mut inner = self.0.lock();
         match ready!(inner.incoming.poll_next_unpin(c)) {
             Some(Ok(s)) => Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(s))),
@@ -116,7 +116,7 @@ where
         OpenSubstreamToken(())
     }
 
-    fn poll_outbound(&self, c: &mut Context, _: &mut OpenSubstreamToken) -> Poll<Self::Substream> {
+    fn poll_outbound(&self, c: &mut Context<'_>, _: &mut OpenSubstreamToken) -> Poll<Self::Substream> {
         let mut inner = self.0.lock();
         Pin::new(&mut inner.control).poll_open_stream(c).map_err(YamuxError)
     }
@@ -125,25 +125,25 @@ where
         self.0.lock().control.abort_open_stream()
     }
 
-    fn read_substream(&self, c: &mut Context, s: &mut Self::Substream, b: &mut [u8]) -> Poll<usize> {
+    fn read_substream(&self, c: &mut Context<'_>, s: &mut Self::Substream, b: &mut [u8]) -> Poll<usize> {
         Pin::new(s).poll_read(c, b).map_err(|e| YamuxError(e.into()))
     }
 
-    fn write_substream(&self, c: &mut Context, s: &mut Self::Substream, b: &[u8]) -> Poll<usize> {
+    fn write_substream(&self, c: &mut Context<'_>, s: &mut Self::Substream, b: &[u8]) -> Poll<usize> {
         Pin::new(s).poll_write(c, b).map_err(|e| YamuxError(e.into()))
     }
 
-    fn flush_substream(&self, c: &mut Context, s: &mut Self::Substream) -> Poll<()> {
+    fn flush_substream(&self, c: &mut Context<'_>, s: &mut Self::Substream) -> Poll<()> {
         Pin::new(s).poll_flush(c).map_err(|e| YamuxError(e.into()))
     }
 
-    fn shutdown_substream(&self, c: &mut Context, s: &mut Self::Substream) -> Poll<()> {
+    fn shutdown_substream(&self, c: &mut Context<'_>, s: &mut Self::Substream) -> Poll<()> {
         Pin::new(s).poll_close(c).map_err(|e| YamuxError(e.into()))
     }
 
     fn destroy_substream(&self, _: Self::Substream) { }
 
-    fn close(&self, c: &mut Context) -> Poll<()> {
+    fn close(&self, c: &mut Context<'_>) -> Poll<()> {
         let mut inner = self.0.lock();
         if let std::task::Poll::Ready(x) = Pin::new(&mut inner.control).poll_close(c) {
             return Poll::Ready(x.map_err(YamuxError))
@@ -158,14 +158,17 @@ where
         Poll::Pending
     }
 
-    fn flush_all(&self, _: &mut Context) -> Poll<()> {
+    fn flush_all(&self, _: &mut Context<'_>) -> Poll<()> {
         Poll::Ready(Ok(()))
     }
 }
 
 /// The yamux configuration.
 #[derive(Clone)]
-pub struct Config(yamux::Config);
+pub struct Config {
+    config: yamux::Config,
+    mode: Option<yamux::Mode>
+}
 
 /// The yamux configuration for upgrading I/O resources which are ![`Send`].
 #[derive(Clone)]
@@ -173,7 +176,15 @@ pub struct LocalConfig(Config);
 
 impl Config {
     pub fn new(cfg: yamux::Config) -> Self {
-        Config(cfg)
+        Config { config: cfg, mode: None }
+    }
+
+    /// Override the connection mode.
+    ///
+    /// This will always use the provided mode during the connection upgrade,
+    /// irrespective of whether an inbound or outbound upgrade happens.
+    pub fn override_mode(&mut self, mode: yamux::Mode) {
+        self.mode = Some(mode)
     }
 
     /// Turn this into a [`LocalConfig`] for use with upgrades of ![`Send`] resources.
@@ -184,7 +195,7 @@ impl Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Config(yamux::Config::default())
+        Config::new(yamux::Config::default())
     }
 }
 
@@ -192,13 +203,13 @@ impl Deref for Config {
     type Target = yamux::Config;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.config
     }
 }
 
 impl DerefMut for Config {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        &mut self.config
     }
 }
 
@@ -229,7 +240,7 @@ where
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, io: C, _: Self::Info) -> Self::Future {
-        future::ready(Ok(Yamux::new(io, self.0, yamux::Mode::Server)))
+        future::ready(Ok(Yamux::new(io, self.config, self.mode.unwrap_or(yamux::Mode::Server))))
     }
 }
 
@@ -242,7 +253,8 @@ where
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, io: C, _: Self::Info) -> Self::Future {
-        future::ready(Ok(Yamux::local(io, (self.0).0, yamux::Mode::Server)))
+        let cfg = self.0;
+        future::ready(Ok(Yamux::local(io, cfg.config, cfg.mode.unwrap_or(yamux::Mode::Server))))
     }
 }
 
@@ -255,7 +267,7 @@ where
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, io: C, _: Self::Info) -> Self::Future {
-        future::ready(Ok(Yamux::new(io, self.0, yamux::Mode::Client)))
+        future::ready(Ok(Yamux::new(io, self.config, self.mode.unwrap_or(yamux::Mode::Client))))
     }
 }
 
@@ -268,7 +280,8 @@ where
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, io: C, _: Self::Info) -> Self::Future {
-        future::ready(Ok(Yamux::local(io, (self.0).0, yamux::Mode::Client)))
+        let cfg = self.0;
+        future::ready(Ok(Yamux::local(io, cfg.config, cfg.mode.unwrap_or(yamux::Mode::Client))))
     }
 }
 
@@ -290,7 +303,7 @@ pub struct Incoming<T> {
 }
 
 impl<T> fmt::Debug for Incoming<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("Incoming")
     }
 }
@@ -302,7 +315,7 @@ pub struct LocalIncoming<T> {
 }
 
 impl<T> fmt::Debug for LocalIncoming<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("LocalIncoming")
     }
 }
@@ -310,7 +323,7 @@ impl<T> fmt::Debug for LocalIncoming<T> {
 impl<T> Stream for Incoming<T> {
     type Item = Result<yamux::Stream, YamuxError>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> std::task::Poll<Option<Self::Item>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> std::task::Poll<Option<Self::Item>> {
         self.stream.as_mut().poll_next_unpin(cx)
     }
 
@@ -325,7 +338,7 @@ impl<T> Unpin for Incoming<T> {
 impl<T> Stream for LocalIncoming<T> {
     type Item = Result<yamux::Stream, YamuxError>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> std::task::Poll<Option<Self::Item>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> std::task::Poll<Option<Self::Item>> {
         self.stream.as_mut().poll_next_unpin(cx)
     }
 

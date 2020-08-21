@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2020 Sigma Prime Pty Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,31 +18,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! mDNS is a protocol defined by [RFC 6762](https://tools.ietf.org/html/rfc6762) that allows
-//! querying nodes that correspond to a certain domain name.
-//!
-//! In the context of libp2p, the mDNS protocol is used to discover other nodes on the local
-//! network that support libp2p.
-//!
-//! # Usage
-//!
-//! This crate provides the `Mdns` struct which implements the `NetworkBehaviour` trait. This
-//! struct will automatically discover other libp2p nodes on the local network.
-//!
+//! Error types that can result from gossipsub.
 
-/// Hardcoded name of the mDNS service. Part of the mDNS libp2p specifications.
-const SERVICE_NAME: &[u8] = b"_p2p._udp.local";
-/// Hardcoded name of the service used for DNS-SD.
-const META_QUERY_SERVICE: &[u8] = b"_services._dns-sd._udp.local";
+use libp2p_core::identity::error::SigningError;
 
-#[cfg(feature = "async-std")]
-pub use self::{behaviour::Mdns, service::MdnsService};
-#[cfg(feature = "tokio")]
-pub use self::{behaviour::TokioMdns, service::TokioMdnsService};
+/// Error associated with publishing a gossipsub message.
+#[derive(Debug)]
+pub enum PublishError {
+    /// This message has already been published.
+    Duplicate,
+    /// An error occurred whilst signing the message.
+    SigningError(SigningError),
+    /// There were no peers to send this message to.
+    InsufficientPeers,
+}
 
-pub use self::behaviour::MdnsEvent;
-
-mod behaviour;
-mod dns;
-
-pub mod service;
+impl From<SigningError> for PublishError {
+    fn from(error: SigningError) -> Self {
+        PublishError::SigningError(error)
+    }
+}

@@ -98,6 +98,7 @@ where
 
 /// The events emitted by the [`RequestResponseHandler`].
 #[doc(hidden)]
+#[derive(Debug)]
 pub enum RequestResponseHandlerEvent<TCodec>
 where
     TCodec: RequestResponseCodec,
@@ -244,9 +245,10 @@ where
 
     fn poll(
         &mut self,
-        cx: &mut Context,
-    ) -> Poll<ProtocolsHandlerEvent<RequestProtocol<TCodec>, RequestId, Self::OutEvent, Self::Error>>
-    {
+        cx: &mut Context<'_>,
+    ) -> Poll<
+        ProtocolsHandlerEvent<RequestProtocol<TCodec>, RequestId, Self::OutEvent, Self::Error>,
+    > {
         // Check for a pending (fatal) error.
         if let Some(err) = self.pending_error.take() {
             // The handler will not be polled again by the `Swarm`.
@@ -296,7 +298,7 @@ where
             self.outbound.shrink_to_fit();
         }
 
-        if self.inbound.is_empty() {
+        if self.inbound.is_empty() && self.keep_alive.is_yes() {
             // No new inbound or outbound requests. However, we may just have
             // started the latest inbound or outbound upgrade(s), so make sure
             // the keep-alive timeout is preceded by the substream timeout.

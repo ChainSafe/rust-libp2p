@@ -1,3 +1,36 @@
+# 0.23.0 [2020-08-18]
+
+- Bump `libp2p-core` dependency.
+
+# 0.22.0 [2020-08-03]
+
+**NOTE**: For a smooth upgrade path from `0.20` to `> 0.21`
+on an existing deployment, this version must not be skipped
+or the provided `LegacyConfig` used!
+
+- Stop sending length-prefixed protobuf frames in handshake
+payloads by default. See [issue 1631](https://github.com/libp2p/rust-libp2p/issues/1631).
+The new `LegacyConfig` is provided to optionally
+configure sending the legacy handshake. Note: This release
+always supports receiving legacy handshake payloads. A future
+release will also move receiving legacy handshake payloads
+into a `LegacyConfig` option. However, all legacy configuration
+options will eventually be removed, so this is primarily to allow
+delaying the handshake upgrade or keeping compatibility with a network
+whose peers are slow to upgrade, without having to freeze the
+version of `libp2p-noise` altogether in these projects.
+
+# 0.21.0 [2020-07-17]
+
+**NOTE**: For a smooth upgrade path from `0.20` to `> 0.21`
+on an existing deployment, this version must not be skipped!
+
+- Add support for reading handshake protobuf frames without
+length prefixes in preparation for no longer sending them.
+See [issue 1631](https://github.com/libp2p/rust-libp2p/issues/1631).
+
+- Update the `snow` dependency to the latest patch version.
+
 # 0.20.0 [2020-07-01]
 
 - Updated dependencies.
