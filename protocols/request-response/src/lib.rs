@@ -71,6 +71,10 @@
 pub mod codec;
 pub mod handler;
 
+// Disabled until #1706 is fixed:
+// pub mod throttled;
+// pub use throttled::Throttled;
+
 pub use codec::{ProtocolName, RequestResponseCodec};
 pub use handler::ProtocolSupport;
 
@@ -302,6 +306,12 @@ where
             addresses: HashMap::new(),
         }
     }
+
+    // Disabled until #1706 is fixed.
+    //    /// Wrap this behaviour in [`Throttled`] to limit the number of concurrent requests per peer.
+    //    pub fn throttled(self) -> Throttled<TCodec> {
+    //        Throttled::new(self)
+    //    }
 
     /// Initiates sending a request.
     ///

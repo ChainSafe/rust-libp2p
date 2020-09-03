@@ -2,7 +2,7 @@
 name = "libp2p-request-response"
 edition = "2018"
 description = "Generic Request/Response Protocols"
-version = "0.1.2"
+version = "0.3.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,9 +12,12 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 async-trait = "0.1"
 futures = "0.3.1"
-libp2p = "0.21.1"
+libp2p = "0.24"
 # libp2p-core = "0.20"
 # libp2p-swarm = "0.20"
+log = "0.4.11"
+lru = "0.6"
+rand = "0.7"
 smallvec = "1.4"
 wasm-timer = "0.2"
 async-std = { version = "1.6.3", features = ["unstable"] }

@@ -205,7 +205,15 @@ where
         TMuxer: 'a,
         THandler: 'a,
     {
-        self.listen_addrs().flat_map(move |server| address_translation(server, observed_addr))
+        let mut addrs: Vec<_> = self.listen_addrs()
+            .filter_map(move |server| address_translation(server, observed_addr))
+            .collect();
+
+        // remove duplicates
+        addrs.sort_unstable();
+        addrs.dedup();
+
+        addrs.into_iter()
     }
 
     /// Returns the peer id of the local node.
@@ -327,7 +335,7 @@ where
     }
 
     /// Provides an API similar to `Stream`, except that it cannot error.
-    pub fn poll<'a>(&'a mut self, cx: &mut Context) -> Poll<NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>>
+    pub fn poll<'a>(&'a mut self, cx: &mut Context<'_>) -> Poll<NetworkEvent<'a, TTrans, TInEvent, TOutEvent, THandler, TConnInfo, TPeerId>>
     where
         TTrans: Transport<Output = (TConnInfo, TMuxer)>,
         TTrans::Error: Send + 'static,
@@ -405,12 +413,12 @@ where
                 }
                 event
             }
-            Poll::Ready(PoolEvent::ConnectionError { id, connected, error, num_established, .. }) => {
-                NetworkEvent::ConnectionError {
+            Poll::Ready(PoolEvent::ConnectionClosed { id, connected, error, num_established, .. }) => {
+                NetworkEvent::ConnectionClosed {
                     id,
                     connected,
-                    error,
                     num_established,
+                    error,
                 }
             }
             Poll::Ready(PoolEvent::ConnectionEvent { connection, event }) => {
@@ -625,18 +633,6 @@ impl NetworkConfig {
         self
     }
 
-    /// Shortcut for calling `executor` with an object that calls the given closure.
-    pub fn set_executor_fn(mut self, f: impl Fn(Pin<Box<dyn Future<Output = ()> + Send>>) + Send + 'static) -> Self {
-        struct SpawnImpl<F>(F);
-        impl<F: Fn(Pin<Box<dyn Future<Output = ()> + Send>>)> Executor for SpawnImpl<F> {
-            fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
-                (self.0)(f)
-            }
-        }
-        self.set_executor(Box::new(SpawnImpl(f)));
-        self
-    }
-
     pub fn executor(&self) -> Option<&Box<dyn Executor + Send>> {
         self.manager_config.executor.as_ref()
     }
@@ -683,4 +679,25 @@ impl NetworkConfig {
         self.pool_limits.max_outgoing_per_peer = Some(n);
         self
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Dummy;
+
+    impl Executor for Dummy {
+        fn exec(&self, _: Pin<Box<dyn Future<Output=()> + Send>>) { }
+    }
+
+    #[test]
+    fn set_executor() {
+        NetworkConfig::default()
+            .set_executor(Box::new(Dummy))
+            .set_executor(Box::new(|f| {
+                async_std::task::spawn(f);
+            }));
+    }
+
 }

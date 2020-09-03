@@ -109,7 +109,7 @@ where
                 let write = self.codec.write_response(&protocol, &mut io, response);
                 write.await?;
             }
-
+            io.close().await?;
             Ok(())
         }
         .boxed()
@@ -158,6 +158,7 @@ where
         async move {
             let write = self.codec.write_request(&protocol, &mut io, self.request);
             write.await?;
+            io.close().await?;
             let read = self.codec.read_response(&protocol, &mut io);
             let response = read.await?;
             Ok(response)
