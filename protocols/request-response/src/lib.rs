@@ -71,10 +71,6 @@
 pub mod codec;
 pub mod handler;
 
-// Disabled until #1706 is fixed:
-// pub mod throttled;
-// pub use throttled::Throttled;
-
 pub use codec::{ProtocolName, RequestResponseCodec};
 pub use handler::ProtocolSupport;
 
@@ -635,7 +631,7 @@ where
 
     fn poll(
         &mut self,
-        _: &mut Context,
+        _: &mut Context<'_>,
         _: &mut impl PollParameters,
     ) -> Poll<
         NetworkBehaviourAction<
