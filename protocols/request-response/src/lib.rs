@@ -76,8 +76,8 @@ pub use handler::ProtocolSupport;
 
 use async_std::sync::Sender;
 use handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
-use libp2p::core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
-use libp2p::swarm::{
+use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
+use libp2p_swarm::{
     DialPeerCondition, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use smallvec::SmallVec;

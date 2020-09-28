@@ -22,17 +22,17 @@
 
 use async_trait::async_trait;
 use futures::{channel::mpsc, prelude::*};
-use libp2p::core::{
+use libp2p_core::{
     identity,
     muxing::StreamMuxerBox,
     transport::{boxed::Boxed, Transport},
     upgrade::{self, read_one, write_one},
     Multiaddr, PeerId,
 };
-use libp2p::noise::{Keypair, NoiseConfig, X25519Spec};
-use libp2p::swarm::Swarm;
-use libp2p::tcp::TcpConfig;
+use libp2p_noise::{Keypair, NoiseConfig, X25519Spec};
 use libp2p_request_response::*;
+use libp2p_swarm::Swarm;
+use libp2p_tcp::TcpConfig;
 use rand::{self, Rng};
 use std::{io, iter};
 // use std::{collections::HashSet, num::NonZeroU16}; // Disabled until #1706 is fixed.
@@ -327,7 +327,7 @@ fn mk_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox), io::Error>) {
         .nodelay(true)
         .upgrade(upgrade::Version::V1)
         .authenticate(NoiseConfig::xx(noise_keys).into_authenticated())
-        .multiplex(libp2p::yamux::Config::default())
+        .multiplex(libp2p_yamux::Config::default())
         .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
         .boxed();
@@ -365,7 +365,7 @@ impl RequestResponseCodec for PingCodec {
             .map(|res| match res {
                 Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
                 Ok(vec) if vec.is_empty() => Err(io::ErrorKind::UnexpectedEof.into()),
-                Ok(vec) => Ok(Ping(vec))
+                Ok(vec) => Ok(Ping(vec)),
             })
             .await
     }
@@ -378,7 +378,7 @@ impl RequestResponseCodec for PingCodec {
             .map(|res| match res {
                 Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
                 Ok(vec) if vec.is_empty() => Err(io::ErrorKind::UnexpectedEof.into()),
-                Ok(vec) => Ok(Pong(vec))
+                Ok(vec) => Ok(Pong(vec)),
             })
             .await
     }

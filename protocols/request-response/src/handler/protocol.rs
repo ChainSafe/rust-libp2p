@@ -28,8 +28,8 @@ use crate::RequestId;
 
 use async_std::sync::{Receiver, Sender};
 use futures::{future::BoxFuture, prelude::*};
-use libp2p::core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use libp2p::swarm::NegotiatedSubstream;
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_swarm::NegotiatedSubstream;
 use smallvec::SmallVec;
 use std::io;
 

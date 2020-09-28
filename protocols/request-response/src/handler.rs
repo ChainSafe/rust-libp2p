@@ -27,8 +27,8 @@ pub use protocol::{ProtocolSupport, RequestProtocol, ResponseProtocol};
 
 use async_std::sync::{channel, Sender};
 use futures::{future::BoxFuture, prelude::*, stream::FuturesUnordered};
-use libp2p::core::upgrade::{NegotiationError, UpgradeError};
-use libp2p::swarm::{
+use libp2p_core::upgrade::{NegotiationError, UpgradeError};
+use libp2p_swarm::{
     protocols_handler::{
         KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr,
     },
