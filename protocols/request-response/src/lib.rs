@@ -191,9 +191,9 @@ pub enum InboundFailure {
 /// See [`RequestResponse::send_response`].
 #[derive(Debug)]
 pub struct ResponseChannel<TResponse> {
-    request_id: RequestId,
+    pub request_id: RequestId,
     pub peer: PeerId,
-    sender: oneshot::Sender<TResponse>,
+    pub sender: oneshot::Sender<TResponse>,
 }
 
 impl<TResponse> ResponseChannel<TResponse> {
@@ -217,13 +217,15 @@ impl<TResponse> ResponseChannel<TResponse> {
     /// If the receiving end has dropped, this will return an `Err` with the response instead.
     pub fn send(self, rs: TResponse) {
         // Intentionally ignore if receiver is dropped
-        let _ = self.sender.send(rs);
+        if let Err(_) = self.sender.send(rs) {
+            panic!("ERROR HERE");
+        }
     }
 }
 
 /// The ID of an inbound or outbound request.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct RequestId(u64);
+pub struct RequestId(pub u64);
 
 impl fmt::Display for RequestId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
