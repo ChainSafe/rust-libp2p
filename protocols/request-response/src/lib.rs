@@ -207,6 +207,13 @@ impl<TResponse> ResponseChannel<TResponse> {
     pub(crate) fn request_id(&self) -> RequestId {
         self.request_id
     }
+
+    /// Sends a response through the channel.
+    /// If the receiving end has dropped, this will return an `Err` with the response instead.
+    pub fn send(self, rs: TResponse) {
+        // Intentionally ignore if receiver is dropped
+        let _ = self.sender.send(rs);
+    }
 }
 
 /// The ID of an inbound or outbound request.
