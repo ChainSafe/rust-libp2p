@@ -36,30 +36,27 @@
 
 mod codec;
 
-use codec::{Codec, Message, ProtocolWrapper, Type};
+use super::{
+    ProtocolSupport, RequestId, RequestResponse, RequestResponseCodec, RequestResponseConfig,
+    RequestResponseEvent, RequestResponseMessage, ResponseChannel,
+};
 use crate::handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
+use codec::{Codec, Message, ProtocolWrapper, Type};
 use futures::ready;
-use libp2p_core::{ConnectedPoint, connection::ConnectionId, Multiaddr, PeerId};
+use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use lru::LruCache;
-use std::{collections::{HashMap, VecDeque}, task::{Context, Poll}};
 use std::{cmp::max, num::NonZeroU16};
-use super::{
-    ProtocolSupport,
-    RequestId,
-    RequestResponse,
-    RequestResponseCodec,
-    RequestResponseConfig,
-    RequestResponseEvent,
-    RequestResponseMessage,
-    ResponseChannel
+use std::{
+    collections::{HashMap, VecDeque},
+    task::{Context, Poll},
 };
 
 /// A wrapper around [`RequestResponse`] which adds request limits per peer.
 pub struct Throttled<C>
 where
     C: RequestResponseCodec + Send,
-    C::Protocol: Sync
+    C::Protocol: Sync,
 {
     /// A random id used for logging.
     id: u32,
@@ -78,7 +75,7 @@ where
     /// Current outbound credit grants in flight.
     credit_messages: HashMap<PeerId, Credit>,
     /// The current credit ID.
-    credit_id: u64
+    credit_id: u64,
 }
 
 /// Credit information that is sent to remote peers.
@@ -89,7 +86,7 @@ struct Credit {
     /// The ID of the outbound credit grant message.
     request: RequestId,
     /// The number of requests the remote is allowed to send.
-    amount: u16
+    amount: u16,
 }
 
 /// Max. number of inbound requests that can be received.
@@ -99,7 +96,7 @@ struct Limit {
     max_recv: NonZeroU16,
     /// The next receive limit which becomes active after
     /// the current limit has been reached.
-    next_max: NonZeroU16
+    next_max: NonZeroU16,
 }
 
 impl Limit {
@@ -111,7 +108,7 @@ impl Limit {
         // sender so we must not use `max` right away.
         Limit {
             max_recv: NonZeroU16::new(1).expect("1 > 0"),
-            next_max: max
+            next_max: max,
         }
     }
 
@@ -140,7 +137,7 @@ struct PeerInfo {
     /// Remaining number of inbound requests that can be received.
     recv_budget: u16,
     /// The ID of the credit message that granted the current `send_budget`.
-    send_budget_id: Option<u64>
+    send_budget_id: Option<u64>,
 }
 
 impl PeerInfo {
@@ -149,7 +146,7 @@ impl PeerInfo {
             limit,
             send_budget: 1,
             recv_budget: 1,
-            send_budget_id: None
+            send_budget_id: None,
         }
     }
 }
@@ -157,16 +154,18 @@ impl PeerInfo {
 impl<C> Throttled<C>
 where
     C: RequestResponseCodec + Send + Clone,
-    C::Protocol: Sync
+    C::Protocol: Sync,
 {
     /// Create a new throttled request-response behaviour.
     pub fn new<I>(c: C, protos: I, cfg: RequestResponseConfig) -> Self
     where
         I: IntoIterator<Item = (C::Protocol, ProtocolSupport)>,
         C: Send,
-        C::Protocol: Sync
+        C::Protocol: Sync,
     {
-        let protos = protos.into_iter().map(|(p, ps)| (ProtocolWrapper::new(b"/t/1", p), ps));
+        let protos = protos
+            .into_iter()
+            .map(|(p, ps)| (ProtocolWrapper::new(b"/t/1", p), ps));
         Throttled::from(RequestResponse::new(Codec::new(c, 8192), protos, cfg))
     }
 
@@ -181,7 +180,7 @@ where
             limit_overrides: HashMap::new(),
             events: VecDeque::new(),
             credit_messages: HashMap::new(),
-            credit_id: 0
+            credit_id: 0,
         }
     }
 
@@ -210,7 +209,10 @@ where
 
     /// Has the limit of outbound requests been reached for the given peer?
     pub fn can_send(&mut self, p: &PeerId) -> bool {
-        self.peer_info.get(p).map(|i| i.send_budget > 0).unwrap_or(true)
+        self.peer_info
+            .get(p)
+            .map(|i| i.send_budget > 0)
+            .unwrap_or(true)
     }
 
     /// Send a request to a peer.
@@ -219,22 +221,31 @@ where
     /// returned. Sending more outbound requests should only be attempted
     /// once [`Event::ResumeSending`] has been received from [`NetworkBehaviour::poll`].
     pub fn send_request(&mut self, p: &PeerId, req: C::Request) -> Result<RequestId, C::Request> {
-        let info =
-            if let Some(info) = self.peer_info.get_mut(p) {
-                info
-            } else if let Some(info) = self.offline_peer_info.pop(p) {
-                if info.recv_budget > 1 {
-                    self.send_credit(p, info.recv_budget - 1)
-                }
-                self.peer_info.entry(p.clone()).or_insert(info)
-            } else {
-                let limit = self.limit_overrides.get(p).copied().unwrap_or(self.default_limit);
-                self.peer_info.entry(p.clone()).or_insert(PeerInfo::new(limit))
-            };
+        let info = if let Some(info) = self.peer_info.get_mut(p) {
+            info
+        } else if let Some(info) = self.offline_peer_info.pop(p) {
+            if info.recv_budget > 1 {
+                self.send_credit(p, info.recv_budget - 1)
+            }
+            self.peer_info.entry(p.clone()).or_insert(info)
+        } else {
+            let limit = self
+                .limit_overrides
+                .get(p)
+                .copied()
+                .unwrap_or(self.default_limit);
+            self.peer_info
+                .entry(p.clone())
+                .or_insert(PeerInfo::new(limit))
+        };
 
         if info.send_budget == 0 {
-            log::trace!("{:08x}: no more budget to send another request to {}", self.id, p);
-            return Err(req)
+            log::trace!(
+                "{:08x}: no more budget to send another request to {}",
+                self.id,
+                p
+            );
+            return Err(req);
         }
 
         info.send_budget -= 1;
@@ -255,9 +266,15 @@ where
     ///
     /// See [`RequestResponse::send_response`] for details.
     pub fn send_response(&mut self, ch: ResponseChannel<Message<C::Response>>, res: C::Response) {
-        log::trace!("{:08x}: sending response {} to peer {}", self.id, ch.request_id(), &ch.peer);
+        log::trace!(
+            "{:08x}: sending response {} to peer {}",
+            self.id,
+            ch.request_id(),
+            &ch.peer
+        );
         if let Some(info) = self.peer_info.get_mut(&ch.peer) {
-            if info.recv_budget == 0 { // need to send more credit to the remote peer
+            if info.recv_budget == 0 {
+                // need to send more credit to the remote peer
                 let crd = info.limit.switch();
                 info.recv_budget = info.limit.max_recv.get();
                 self.send_credit(&ch.peer, crd)
@@ -298,8 +315,18 @@ where
     fn send_credit(&mut self, p: &PeerId, amount: u16) {
         let cid = self.next_credit_id();
         let rid = self.behaviour.send_request(p, Message::credit(amount, cid));
-        log::trace!("{:08x}: sending {} as credit {} to {}", self.id, amount, cid, p);
-        let credit = Credit { id: cid, request: rid, amount };
+        log::trace!(
+            "{:08x}: sending {} as credit {} to {}",
+            self.id,
+            amount,
+            cid,
+            p
+        );
+        let credit = Credit {
+            id: cid,
+            request: rid,
+            amount,
+        };
         self.credit_messages.insert(p.clone(), credit);
     }
 
@@ -321,13 +348,13 @@ pub enum Event<Req, Res, CRes = Res> {
     /// When previously reaching the send limit of a peer,
     /// this event is eventually emitted when sending is
     /// allowed to resume.
-    ResumeSending(PeerId)
+    ResumeSending(PeerId),
 }
 
 impl<C> NetworkBehaviour for Throttled<C>
 where
     C: RequestResponseCodec + Send + Clone + 'static,
-    C::Protocol: Sync
+    C::Protocol: Sync,
 {
     type ProtocolsHandler = RequestResponseHandler<Codec<C>>;
     type OutEvent = Event<C::Request, C::Response, Message<C::Response>>;
@@ -340,7 +367,12 @@ where
         self.behaviour.addresses_of_peer(p)
     }
 
-    fn inject_connection_established(&mut self, p: &PeerId, id: &ConnectionId, end: &ConnectedPoint) {
+    fn inject_connection_established(
+        &mut self,
+        p: &PeerId,
+        id: &ConnectionId,
+        end: &ConnectedPoint,
+    ) {
         self.behaviour.inject_connection_established(p, id, end)
     }
 
@@ -364,16 +396,19 @@ where
         self.behaviour.inject_connected(p);
         // The limit may have been added by `Throttled::send_request` already.
         if !self.peer_info.contains_key(p) {
-            let info =
-                if let Some(info) = self.offline_peer_info.pop(p) {
-                    if info.recv_budget > 1 {
-                        self.send_credit(p, info.recv_budget - 1)
-                    }
-                    info
-                } else {
-                    let limit = self.limit_overrides.get(p).copied().unwrap_or(self.default_limit);
-                    PeerInfo::new(limit)
-                };
+            let info = if let Some(info) = self.offline_peer_info.pop(p) {
+                if info.recv_budget > 1 {
+                    self.send_credit(p, info.recv_budget - 1)
+                }
+                info
+            } else {
+                let limit = self
+                    .limit_overrides
+                    .get(p)
+                    .copied()
+                    .unwrap_or(self.default_limit);
+                PeerInfo::new(limit)
+            };
             self.peer_info.insert(p.clone(), info);
         }
     }
@@ -393,136 +428,178 @@ where
         self.behaviour.inject_dial_failure(p)
     }
 
-    fn inject_event(&mut self, p: PeerId, i: ConnectionId, e: RequestResponseHandlerEvent<Codec<C>>) {
+    fn inject_event(
+        &mut self,
+        p: PeerId,
+        i: ConnectionId,
+        e: RequestResponseHandlerEvent<Codec<C>>,
+    ) {
         self.behaviour.inject_event(p, i, e)
     }
 
-    fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters)
-        -> Poll<NetworkBehaviourAction<RequestProtocol<Codec<C>>, Self::OutEvent>>
-    {
+    fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+        params: &mut impl PollParameters,
+    ) -> Poll<NetworkBehaviourAction<RequestProtocol<Codec<C>>, Self::OutEvent>> {
         loop {
             if let Some(ev) = self.events.pop_front() {
-                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(ev))
+                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(ev));
             } else if self.events.capacity() > super::EMPTY_QUEUE_SHRINK_THRESHOLD {
                 self.events.shrink_to_fit()
             }
 
             let event = match ready!(self.behaviour.poll(cx, params)) {
-                | NetworkBehaviourAction::GenerateEvent(RequestResponseEvent::Message { peer, message }) => {
+                NetworkBehaviourAction::GenerateEvent(RequestResponseEvent::Message {
+                    peer,
+                    message,
+                }) => {
                     let message = match message {
-                        | RequestResponseMessage::Response { request_id, response } =>
-                            match &response.header().typ {
-                                | Some(Type::Ack) => {
-                                    if let Some(id) = self.credit_messages.get(&peer).map(|c| c.id) {
-                                        if Some(id) == response.header().ident {
-                                            log::trace!("{:08x}: received ack {} from {}", self.id, id, peer);
-                                            self.credit_messages.remove(&peer);
-                                        }
-                                    }
-                                    continue
-                                }
-                                | Some(Type::Response) => {
-                                    log::trace!("{:08x}: received response {} from {}", self.id, request_id, peer);
-                                    if let Some(rs) = response.into_parts().1 {
-                                        RequestResponseMessage::Response { request_id, response: rs }
-                                    } else {
-                                        log::error! { "{:08x}: missing data for response {} from peer {}",
+                        RequestResponseMessage::Response {
+                            request_id,
+                            response,
+                        } => match &response.header().typ {
+                            Some(Type::Ack) => {
+                                if let Some(id) = self.credit_messages.get(&peer).map(|c| c.id) {
+                                    if Some(id) == response.header().ident {
+                                        log::trace!(
+                                            "{:08x}: received ack {} from {}",
                                             self.id,
-                                            request_id,
-                                            peer
-                                        }
-                                        continue
-                                    }
-                                }
-                                | ty => {
-                                    log::trace! {
-                                        "{:08x}: unknown message type: {:?} from {}; expected response or credit",
-                                        self.id,
-                                        ty,
-                                        peer
-                                    };
-                                    continue
-                                }
-                            }
-                        | RequestResponseMessage::Request { request_id, request, channel } =>
-                            match &request.header().typ {
-                                | Some(Type::Credit) => {
-                                    if let Some(info) = self.peer_info.get_mut(&peer) {
-                                        let id = if let Some(n) = request.header().ident {
-                                            n
-                                        } else {
-                                            log::warn! { "{:08x}: missing credit id in message from {}",
-                                                self.id,
-                                                peer
-                                            }
-                                            continue
-                                        };
-                                        let credit = request.header().credit.unwrap_or(0);
-                                        log::trace! { "{:08x}: received {} additional credit {} from {}",
-                                            self.id,
-                                            credit,
                                             id,
                                             peer
-                                        };
-                                        if info.send_budget_id < Some(id) {
-                                            if info.send_budget == 0 && credit > 0 {
-                                                log::trace!("{:08x}: sending to peer {} can resume", self.id, peer);
-                                                self.events.push_back(Event::ResumeSending(peer.clone()))
-                                            }
-                                            info.send_budget += credit;
-                                            info.send_budget_id = Some(id)
-                                        }
-                                        self.behaviour.send_response(channel, Message::ack(id))
-                                    }
-                                    continue
-                                }
-                                | Some(Type::Request) => {
-                                    if let Some(info) = self.peer_info.get_mut(&peer) {
-                                        log::trace! { "{:08x}: received request {} (recv. budget = {})",
-                                            self.id,
-                                            request_id,
-                                            info.recv_budget
-                                        };
-                                        if info.recv_budget == 0 {
-                                            log::debug!("{:08x}: peer {} exceeds its budget", self.id, peer);
-                                            self.events.push_back(Event::TooManyInboundRequests(peer.clone()));
-                                            continue
-                                        }
-                                        info.recv_budget -= 1;
-                                        // We consider a request as proof that our credit grant has
-                                        // reached the peer. Usually, an ACK has already been
-                                        // received.
+                                        );
                                         self.credit_messages.remove(&peer);
                                     }
-                                    if let Some(rq) = request.into_parts().1 {
-                                        RequestResponseMessage::Request { request_id, request: rq, channel }
-                                    } else {
-                                        log::error! { "{:08x}: missing data for request {} from peer {}",
-                                            self.id,
-                                            request_id,
-                                            peer
-                                        }
-                                        continue
-                                    }
                                 }
-                                | ty => {
-                                    log::trace! {
-                                        "{:08x}: unknown message type: {:?} from {}; expected request or ack",
+                                continue;
+                            }
+                            Some(Type::Response) => {
+                                log::trace!(
+                                    "{:08x}: received response {} from {}",
+                                    self.id,
+                                    request_id,
+                                    peer
+                                );
+                                if let Some(rs) = response.into_parts().1 {
+                                    RequestResponseMessage::Response {
+                                        request_id,
+                                        response: rs,
+                                    }
+                                } else {
+                                    log::error! { "{:08x}: missing data for response {} from peer {}",
                                         self.id,
-                                        ty,
+                                        request_id,
                                         peer
-                                    };
-                                    continue
+                                    }
+                                    continue;
                                 }
                             }
+                            ty => {
+                                log::trace! {
+                                    "{:08x}: unknown message type: {:?} from {}; expected response or credit",
+                                    self.id,
+                                    ty,
+                                    peer
+                                };
+                                continue;
+                            }
+                        },
+                        RequestResponseMessage::Request {
+                            request_id,
+                            request,
+                            channel,
+                        } => match &request.header().typ {
+                            Some(Type::Credit) => {
+                                if let Some(info) = self.peer_info.get_mut(&peer) {
+                                    let id = if let Some(n) = request.header().ident {
+                                        n
+                                    } else {
+                                        log::warn! { "{:08x}: missing credit id in message from {}",
+                                            self.id,
+                                            peer
+                                        }
+                                        continue;
+                                    };
+                                    let credit = request.header().credit.unwrap_or(0);
+                                    log::trace! { "{:08x}: received {} additional credit {} from {}",
+                                        self.id,
+                                        credit,
+                                        id,
+                                        peer
+                                    };
+                                    if info.send_budget_id < Some(id) {
+                                        if info.send_budget == 0 && credit > 0 {
+                                            log::trace!(
+                                                "{:08x}: sending to peer {} can resume",
+                                                self.id,
+                                                peer
+                                            );
+                                            self.events
+                                                .push_back(Event::ResumeSending(peer.clone()))
+                                        }
+                                        info.send_budget += credit;
+                                        info.send_budget_id = Some(id)
+                                    }
+                                    self.behaviour.send_response(channel, Message::ack(id))
+                                }
+                                continue;
+                            }
+                            Some(Type::Request) => {
+                                if let Some(info) = self.peer_info.get_mut(&peer) {
+                                    log::trace! { "{:08x}: received request {} (recv. budget = {})",
+                                        self.id,
+                                        request_id,
+                                        info.recv_budget
+                                    };
+                                    if info.recv_budget == 0 {
+                                        log::debug!(
+                                            "{:08x}: peer {} exceeds its budget",
+                                            self.id,
+                                            peer
+                                        );
+                                        self.events
+                                            .push_back(Event::TooManyInboundRequests(peer.clone()));
+                                        continue;
+                                    }
+                                    info.recv_budget -= 1;
+                                    // We consider a request as proof that our credit grant has
+                                    // reached the peer. Usually, an ACK has already been
+                                    // received.
+                                    self.credit_messages.remove(&peer);
+                                }
+                                if let Some(rq) = request.into_parts().1 {
+                                    RequestResponseMessage::Request {
+                                        request_id,
+                                        request: rq,
+                                        channel,
+                                    }
+                                } else {
+                                    log::error! { "{:08x}: missing data for request {} from peer {}",
+                                        self.id,
+                                        request_id,
+                                        peer
+                                    }
+                                    continue;
+                                }
+                            }
+                            ty => {
+                                log::trace! {
+                                    "{:08x}: unknown message type: {:?} from {}; expected request or ack",
+                                    self.id,
+                                    ty,
+                                    peer
+                                };
+                                continue;
+                            }
+                        },
                     };
                     let event = RequestResponseEvent::Message { peer, message };
                     NetworkBehaviourAction::GenerateEvent(Event::Event(event))
                 }
-                | NetworkBehaviourAction::GenerateEvent(RequestResponseEvent::OutboundFailure {
+                NetworkBehaviourAction::GenerateEvent(RequestResponseEvent::OutboundFailure {
                     peer,
                     request_id,
-                    error
+                    error,
                 }) => {
                     if let Some(credit) = self.credit_messages.get_mut(&peer) {
                         if credit.request == request_id {
@@ -536,28 +613,46 @@ where
                             credit.request = self.behaviour.send_request(&peer, msg)
                         }
                     }
-                    let event = RequestResponseEvent::OutboundFailure { peer, request_id, error };
+                    let event = RequestResponseEvent::OutboundFailure {
+                        peer,
+                        request_id,
+                        error,
+                    };
                     NetworkBehaviourAction::GenerateEvent(Event::Event(event))
                 }
-                | NetworkBehaviourAction::GenerateEvent(RequestResponseEvent::InboundFailure {
+                NetworkBehaviourAction::GenerateEvent(RequestResponseEvent::InboundFailure {
                     peer,
                     request_id,
-                    error
+                    error,
                 }) => {
-                    let event = RequestResponseEvent::InboundFailure { peer, request_id, error };
+                    let event = RequestResponseEvent::InboundFailure {
+                        peer,
+                        request_id,
+                        error,
+                    };
                     NetworkBehaviourAction::GenerateEvent(Event::Event(event))
                 }
-                | NetworkBehaviourAction::DialAddress { address } =>
-                    NetworkBehaviourAction::DialAddress { address },
-                | NetworkBehaviourAction::DialPeer { peer_id, condition } =>
-                    NetworkBehaviourAction::DialPeer { peer_id, condition },
-                | NetworkBehaviourAction::NotifyHandler { peer_id, handler, event } =>
-                    NetworkBehaviourAction::NotifyHandler { peer_id, handler, event },
-                | NetworkBehaviourAction::ReportObservedAddr { address, score } =>
+                NetworkBehaviourAction::DialAddress { address } => {
+                    NetworkBehaviourAction::DialAddress { address }
+                }
+                NetworkBehaviourAction::DialPeer { peer_id, condition } => {
+                    NetworkBehaviourAction::DialPeer { peer_id, condition }
+                }
+                NetworkBehaviourAction::NotifyHandler {
+                    peer_id,
+                    handler,
+                    event,
+                } => NetworkBehaviourAction::NotifyHandler {
+                    peer_id,
+                    handler,
+                    event,
+                },
+                NetworkBehaviourAction::ReportObservedAddr { address, score } => {
                     NetworkBehaviourAction::ReportObservedAddr { address, score }
+                }
             };
 
-            return Poll::Ready(event)
+            return Poll::Ready(event);
         }
     }
 }
