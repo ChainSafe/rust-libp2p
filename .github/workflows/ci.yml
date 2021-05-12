@@ -135,7 +135,7 @@ jobs:
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
 
     - name: Run cargo clippy
-      uses: actions-rs/cargo@v1
+      uses: actions-rs/cargo@v1.0.3
       with:
         command: clippy
         args: -- -A clippy::mutable_key_type -A clippy::type_complexity
@@ -170,7 +170,7 @@ jobs:
         key: cargo-build-target-${{ hashFiles('Cargo.toml') }}
 
     - name: Run cargo bench
-      uses: actions-rs/cargo@v1
+      uses: actions-rs/cargo@v1.0.3
       with:
         command: bench
         args: --workspace
