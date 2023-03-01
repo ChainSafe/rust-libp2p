@@ -2155,7 +2155,7 @@ dependencies = [
  "libp2p-webrtc",
  "libp2p-websocket",
  "libp2p-yamux",
- "multiaddr 0.18.0",
+ "multiaddr",
  "pin-project",
  "tokio",
 ]
@@ -2203,8 +2203,8 @@ dependencies = [
  "libp2p-noise",
  "libsecp256k1",
  "log",
- "multiaddr 0.17.0",
- "multihash 0.17.0",
+ "multiaddr",
+ "multihash",
  "multistream-select",
  "once_cell",
  "p256 0.12.0",
@@ -2788,7 +2788,7 @@ dependencies = [
  "libp2p-ping",
  "libp2p-swarm",
  "log",
- "multihash 0.17.0",
+ "multihash",
  "prost",
  "prost-build",
  "prost-codec",
@@ -3047,31 +3047,13 @@ dependencies = [
 [[package]]
 name = "multiaddr"
 version = "0.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b53e0cc5907a5c216ba6584bf74be8ab47d6d6289f72793b2dddbf15dc3bf8c"
+source = "git+https://github.com/ChainSafe/rust-multiaddr.git?rev=2d21365f880622adf1c8e594b72e671dbac9dd64#2d21365f880622adf1c8e594b72e671dbac9dd64"
 dependencies = [
  "arrayref",
  "byteorder",
  "data-encoding",
  "multibase",
- "multihash 0.17.0",
- "percent-encoding",
- "serde",
- "static_assertions",
- "unsigned-varint",
- "url",
-]
-
-[[package]]
-name = "multiaddr"
-version = "0.18.0"
-source = "git+https://github.com/ChainSafe/rust-multiaddr.git?rev=526da71b2335bfcf6ee526e892fad5cd133f341b#526da71b2335bfcf6ee526e892fad5cd133f341b"
-dependencies = [
- "arrayref",
- "byteorder",
- "data-encoding",
- "multibase",
- "multihash 0.18.0",
+ "multihash",
  "percent-encoding",
  "serde",
  "static_assertions",
@@ -3105,17 +3087,6 @@ dependencies = [
  "serde",
  "serde-big-array",
  "sha2 0.10.6",
- "unsigned-varint",
-]
-
-[[package]]
-name = "multihash"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15e5d911412e631e1de11eb313e4dd71f73fd964401102aab23d6c8327c431ba"
-dependencies = [
- "core2",
- "multihash-derive",
  "unsigned-varint",
 ]
 
