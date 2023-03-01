@@ -3065,7 +3065,7 @@ dependencies = [
 [[package]]
 name = "multiaddr"
 version = "0.18.0"
-source = "git+https://github.com/ChainSafe/rust-multiaddr.git#526da71b2335bfcf6ee526e892fad5cd133f341b"
+source = "git+https://github.com/ChainSafe/rust-multiaddr.git?rev=526da71b2335bfcf6ee526e892fad5cd133f341b#526da71b2335bfcf6ee526e892fad5cd133f341b"
 dependencies = [
  "arrayref",
  "byteorder",
