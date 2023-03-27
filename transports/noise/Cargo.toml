@@ -30,7 +30,7 @@ snow = { version = "0.9.1", features = ["ring-resolver"], default-features = fal
 snow = { version = "0.9.0", features = ["default-resolver"], default-features = false }
 
 [dev-dependencies]
-async-io = "1.2.0"
+async-io = "1.13.0"
 ed25519-compact = "2.0.4"
 env_logger = "0.10.0"
 libp2p-tcp = { path = "../tcp", features = ["async-io"] }
